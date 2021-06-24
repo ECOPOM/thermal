@@ -35,6 +35,7 @@ set(PROJECT_BUILD                              "${PROJECT_PATH}/build")
 set(SRC_SRC                                    "${PROJECT_PATH}/src")
 set(INC_SRC                                    "${PROJECT_PATH}/include")
 set(TEST_SRC                                   "${PROJECT_PATH}/tests")
+set(EXT_SRC                                    "${PROJECT_PATH}/ext")
 
 set(LIB_BUILD                                  "${PROJECT_BUILD}/lib")
 set(BIN_BUILD                                  "${PROJECT_BUILD}/bin")
@@ -70,8 +71,8 @@ endif(CCACHE_BIN)
 # -------------------------------------------------------------------------------------------------------------------------------------------
 include(Warnings)
 #CPP STANDARD OPTIONS
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
                     -Wall \
@@ -110,8 +111,10 @@ find_package(fmt CONFIG REQUIRED)
 find_package(OpenCV CONFIG REQUIRED)
 find_package(realsense2 REQUIRED )
 find_package(Armadillo REQUIRED)
+find_package (LibUSB)
 
-set(EXTLIB ncurses fmt::fmt fmt::fmt-header-only ${OpenCV_LIBS} realsense2 armadillo)
+add_subdirectory (${EXT_SRC}/libseek-thermal/src)
+set(EXTLIB seek ${LIBUSB_INCLUDE_DIRS} ncurses fmt::fmt fmt::fmt-header-only ${OpenCV_LIBS} realsense2 armadillo)
 foreach(EXT ${EXTLIB})
     message("external library ${EXT} added")
 endforeach()
@@ -143,7 +146,7 @@ function (add_source_lib NAME)
     endforeach()
 endfunction(add_source_lib)
 
-set(LIBRARIES cplate second)
+set(LIBRARIES cplate)
 
 foreach(LIB ${LIBRARIES})
     add_source_lib(${LIB})
@@ -157,11 +160,15 @@ endforeach()
 if(BUILD_MAIN)
     add_executable(${PROJECT_NAME}_bin ${SRC_SRC}/main.cpp)
     set_target_properties(${PROJECT_NAME}_bin PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
+    target_include_directories(${PROJECT_NAME}_bin PRIVATE
+        ${EXT_SRC}/libseek-thermal/src
+    )
     target_link_libraries(${PROJECT_NAME}_bin
         PUBLIC
             ${LIBRARIES}
         PRIVATE
             ${EXTLIB}
+            ${EXT_SRC}/libseek-thermal/src
     )
     if(ENABLE_SANITIZERS)
         # add_custom_command(TARGET ${PROJECT_NAME}_bin POST_BUILD COMMAND clang-tidy ${SRC_SRC}/main.cpp)
@@ -185,7 +192,7 @@ if(BUILD_TESTS)
         get_filename_component(NAME ${PATH} NAME_WE)
         set(NAME ${PROJECT_NAME}_${NAME})
         add_executable(${NAME} ${PATH})
-        target_link_libraries(${NAME} doctest::doctest ${LIBRARIES})
+        target_link_libraries(${NAME} doctest::doctest ${LIBRARIES} ${EXTLIB})
         add_test(NAME ${NAME} COMMAND ${EXECUTABLE_OUTPUT_PATH}/${NAME})
         if(ENABLE_COVERAGE)
             add_custom_command(TARGET ${NAME} POST_BUILD COMMAND kcov --include-pattern=${SRC_SRC} ${PROJECT_BINARY_DIR}/cover ${PROJECT_BINARY_DIR}/bin/${NAME})

@@ -1,1 +1,4 @@
-# A simple CMAKE template
+# RGBD + THERMAL
+
+Intel Realsense
+Seek ThermalPro
