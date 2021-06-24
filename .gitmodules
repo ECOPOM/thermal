@@ -1,0 +1,3 @@
+[submodule "ext/libseek-thermal"]
+	path = ext/libseek-thermal
+	url = https://github.com/OpenThermal/libseek-thermal
