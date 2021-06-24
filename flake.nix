@@ -49,6 +49,7 @@
           pkgs.boost
           pkgs.libtorch-bin
           pkgs.ncurses
+          pkgs.libusb
           # pkgs.python3
           # (pkgs.python38.withPackages (py: [
           #   py.python-language-server

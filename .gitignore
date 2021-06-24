@@ -2,6 +2,7 @@
 /bin/
 /lib/
 /vendor/
+/ext/
 
 .cs_files
 .notifier
@@ -10,3 +11,6 @@
 /.clangd/
 .gdb_history
 compile_commands.json
+ext
+.cache
+libseek-thermal
