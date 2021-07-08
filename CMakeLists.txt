@@ -25,6 +25,7 @@ set(${CMAKE_PROJECT_NAME}_VERSION_MINOR         1)
 set(${CMAKE_PROJECT_NAME}_VERSION_PATCH         0)
 set(BUILD_EXECUTABLE                           "ON")
 option(BUILD_MAIN      "Build main function"    ON)
+option (FORCE_COLORED_OUTPUT "color output"     ON)
 set(PROJECT_VERSION                             "${${CMAKE_PROJECT_NAME}_VERSION_MAJOR}.${${CMAKE_PROJECT_NAME}_VERSION_MINOR}.${${CMAKE_PROJECT_NAME}_VERSION_PATCH}")
 set(CMAKE_MODULE_PATH                          "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(CMAKE_TOOLCHAIN_FILE                       "${CMAKE_CURRENT_SOURCE_DIR}/vendor/vcpkg/scripts/buildsystems/vcpkg.cmake")
@@ -71,7 +72,7 @@ endif(CCACHE_BIN)
 # -------------------------------------------------------------------------------------------------------------------------------------------
 include(Warnings)
 #CPP STANDARD OPTIONS
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
@@ -80,6 +81,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
                     -Wno-sign-compare \
                     -Woverloaded-virtual \
                     -Wwrite-strings \
+                    -pthread \
                     -Wno-unused")
 
 if((cmake_build_type_tolower STREQUAL "release") OR (cmake_build_type_tolower STREQUAL "fastrelease"))
@@ -102,6 +104,23 @@ elseif((cmake_build_type_tolower STREQUAL "debug") OR (cmake_build_type_tolower 
 endif()
 message ("BUILD TYPE: ${CMAKE_BUILD_TYPE}\n")
 
+if (${FORCE_COLORED_OUTPUT})
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+       add_compile_options (-fdiagnostics-color=always)
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+       add_compile_options (-fcolor-diagnostics)
+    endif ()
+endif ()
+
+foreach(flag_var
+        CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO
+        CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
+        CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO)
+    if(${flag_var} MATCHES "/MT")
+        string(REGEX REPLACE "/MT" "/MD" ${flag_var} "${${flag_var}}")
+    endif(${flag_var} MATCHES "/MT")
+endforeach(flag_var)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------
 #                   EXTERNAL LIB
@@ -111,11 +130,17 @@ find_package(fmt CONFIG REQUIRED)
 find_package(OpenCV CONFIG REQUIRED)
 find_package(realsense2 REQUIRED )
 find_package(Armadillo REQUIRED)
+find_package(Flann REQUIRED)
+find_package(PCL REQUIRED)
 find_package (LibUSB)
 
-add_subdirectory (${EXT_SRC}/libseek-thermal/src)
-set(EXTLIB seek ${LIBUSB_INCLUDE_DIRS} ncurses fmt::fmt fmt::fmt-header-only ${OpenCV_LIBS} realsense2 armadillo)
-foreach(EXT ${EXTLIB})
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
+
+set(EXT_LIB seek ${PCL_LIBRARIES} ${LIBUSB_LIBRARY_DIRS} ncurses fmt::fmt fmt::fmt-header-only ${OpenCV_LIBS} realsense2 armadillo)
+set(EXT_INC ${EXT_SRC}/libseek-thermal/src ${PCL_INCLUDE_DIRS} ${LIBUSB_INCLUDE_DIRS})
+foreach(EXT ${EXT_LIB})
     message("external library ${EXT} added")
 endforeach()
 
@@ -123,6 +148,9 @@ endforeach()
 # -------------------------------------------------------------------------------------------------------------------------------------------
 #                   LOCAL LIB
 # -------------------------------------------------------------------------------------------------------------------------------------------
+add_subdirectory (${EXT_SRC}/libseek-thermal/src)
+include_directories(/usr/include)
+
 function (add_source_lib NAME)
     file(GLOB HEAD_FILES "${INC_SRC}/${NAME}/*.h" "${INC_SRC}/${NAME}/*.hpp")
     file(GLOB CODE_FILES "${SRC_SRC}/${NAME}/*.c" "${SRC_SRC}/${NAME}/*.cpp")
@@ -130,13 +158,13 @@ function (add_source_lib NAME)
     target_include_directories(${NAME}
         PRIVATE
             ${INC_SRC}
-            ${wxWidgets_USE_FILE}
         SYSTEM INTERFACE
+            ${EXT_INC}
             ${INC_SRC}
         )
     target_link_libraries(${NAME}
         PRIVATE
-            ${EXTLIB}
+            ${EXT_LIB}
     )
     foreach(FILE ${CODE_FILES})
         if(ENABLE_SANITIZERS)
@@ -161,13 +189,13 @@ if(BUILD_MAIN)
     add_executable(${PROJECT_NAME}_bin ${SRC_SRC}/main.cpp)
     set_target_properties(${PROJECT_NAME}_bin PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
     target_include_directories(${PROJECT_NAME}_bin PRIVATE
-        ${EXT_SRC}/libseek-thermal/src
+        ${EXT_INC}
     )
     target_link_libraries(${PROJECT_NAME}_bin
         PUBLIC
             ${LIBRARIES}
         PRIVATE
-            ${EXTLIB}
+            ${EXT_LIB}
             ${EXT_SRC}/libseek-thermal/src
     )
     if(ENABLE_SANITIZERS)
@@ -192,7 +220,7 @@ if(BUILD_TESTS)
         get_filename_component(NAME ${PATH} NAME_WE)
         set(NAME ${PROJECT_NAME}_${NAME})
         add_executable(${NAME} ${PATH})
-        target_link_libraries(${NAME} doctest::doctest ${LIBRARIES} ${EXTLIB})
+        target_link_libraries(${NAME} doctest::doctest ${LIBRARIES} ${EXT_LIB})
         add_test(NAME ${NAME} COMMAND ${EXECUTABLE_OUTPUT_PATH}/${NAME})
         if(ENABLE_COVERAGE)
             add_custom_command(TARGET ${NAME} POST_BUILD COMMAND kcov --include-pattern=${SRC_SRC} ${PROJECT_BINARY_DIR}/cover ${PROJECT_BINARY_DIR}/bin/${NAME})

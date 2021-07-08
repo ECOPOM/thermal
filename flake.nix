@@ -37,6 +37,8 @@
           pkgs.cudnn
           opencv
           realsense
+          pkgs.flann
+          pkgs.pcl
           pkgs.stdenv
           pkgs.fmt
           pkgs.doctest
@@ -61,6 +63,14 @@
           #   py.pytorch
           # ]))
         ];
+        RUST_BACKTRACE = "1";
+        CXX = "clang++";
+        CC = "clang";
+        shellHook =''
+          export LD_LIBRARY_PATH=$PWD/vendor/vcpkg/installed/x64-linux/lib:${pkgs.pcl}/lib:$LD_LIBRARY_PATH
+          export CPLUS_INCLUDE_PATH=$PWD/vendor/vcpkg/installed/x64-linux/include:${pkgs.pcl}/include:$CPLUS_INCLUDE_PATH
+          export TEST_PATH=${pkgs.fmt}
+        '';
       };
     }
   );
